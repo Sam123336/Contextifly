@@ -1,4 +1,4 @@
-import type { GraphNode, NodeType, SemanticRole } from './types';
+import type { GraphNode, NodeType, SemanticRole } from '../types';
 
 /**
  * Normalizer: assigns framework-agnostic semantic roles on top of the

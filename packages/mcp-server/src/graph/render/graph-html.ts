@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import * as path from 'node:path';
-import { graphDir } from './store';
-import type { ProjectGraph } from './types';
+import { graphDir } from '../store/graph-store';
+import type { ProjectGraph } from '../types';
 
 /**
  * Render the graph as a fully self-contained interactive HTML page

@@ -1,5 +1,6 @@
-import { extractUiCandidates, GraphIndex, matchUiElement } from './queries';
-import type { GraphNode } from './types';
+import { GraphIndex } from '../analyze/graph-index';
+import { extractUiCandidates, matchUiElement } from '../analyze/search';
+import type { GraphNode } from '../types';
 
 /**
  * "Explain Visually": multi-diagram dossier for any graph node, generated

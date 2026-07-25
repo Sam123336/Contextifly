@@ -6,7 +6,7 @@ import {
   loadFeatureConfig,
   renderFeature,
   renderFeatureList,
-} from './features';
+} from '../analyze/features';
 import {
   ensureGitState,
   type GitState,
@@ -14,22 +14,19 @@ import {
   loadGitState,
   readGitState,
   saveGitState,
-} from './git';
-import { saveGraphHtml } from './html';
-import { indexProject } from './indexer';
-import {
-  analyzeProject,
-  extractUiCandidates,
-  GraphIndex,
-  matchUiElement,
-  renderGraphDiff,
-  renderProjectMap,
-  renderTimeline,
-  searchNodes,
-  whatIf,
-} from './queries';
-import { recordUsage, renderSavingsReport } from './stats';
-import { saveSavingsHtml } from './stats-html';
+} from '../store/git';
+import { renderImpactAcrossApps } from '../analyze/fleet';
+import { saveGraphHtml } from '../render/graph-html';
+import { indexProject } from '../extract/indexer';
+import { simulatePr } from '../analyze/pr-simulation';
+import { GraphIndex } from '../analyze/graph-index';
+import { analyzeProject } from '../analyze/health';
+import { extractUiCandidates, matchUiElement, searchNodes } from '../analyze/search';
+import { whatIf } from '../analyze/what-if';
+import { renderGraphDiff, renderTimeline } from '../render/history';
+import { renderProjectMap } from '../render/project-map';
+import { recordUsage, renderSavingsReport } from '../store/usage-ledger';
+import { saveSavingsHtml } from '../render/savings-html';
 import {
   graphDir,
   listSnapshots,
@@ -37,9 +34,9 @@ import {
   loadSnapshot,
   saveGraph,
   staleFileCount,
-} from './store';
-import type { ProjectGraph } from './types';
-import { renderBlueprint, renderExplainVisually, traceFlow } from './visual';
+} from '../store/graph-store';
+import type { ProjectGraph } from '../types';
+import { renderBlueprint, renderExplainVisually, traceFlow } from '../render/visual';
 
 const projectDirParam = z
   .string()
@@ -421,6 +418,71 @@ export function registerGraphTools(server: McpServer): void {
       try {
         const { index, staleNote } = loadIndex(projectDir);
         return text(staleNote + whatIf(index, action, target));
+      } catch (err) {
+        return errorText(err);
+      }
+    },
+  );
+
+  tool(
+    'impact_across_apps',
+    'Fleet impact: "if I change this backend service, which of my apps breaks, and on ' +
+      'which screen?" Joins the backend graph to every consumer app declared in ' +
+      'contextifly.workspace.json on the endpoints they share — the only symbol a NestJS ' +
+      'controller, a Flutter http call and a web fetch() have in common. Each app is ' +
+      'indexed at its master branch (never at whatever branch it has checked out), so you ' +
+      'always compare against the live version. Reports, per app: affected endpoints, the ' +
+      'exact call sites, the screens behind them — and the apps that are provably NOT ' +
+      'affected. Mobile apps are escalated automatically because shipped builds cannot be ' +
+      'hotfixed. Creates a starter workspace config on first run.',
+    {
+      projectDir: projectDirParam,
+      target: z
+        .string()
+        .min(1)
+        .describe('What you plan to change: a service ("OrdersService"), controller, entity, endpoint, or file path.'),
+    },
+    async ({ projectDir, target }) => {
+      try {
+        const { index, staleNote } = loadIndex(projectDir);
+        return text(staleNote + renderImpactAcrossApps(projectDir, index, target));
+      } catch (err) {
+        return errorText(err);
+      }
+    },
+  );
+
+  tool(
+    'simulate_pr',
+    'Digital twin of a whole pull request: indexes the code before AND after the change ' +
+      'in a throwaway git worktree (your checkout is never touched) and subtracts the two ' +
+      'graphs. A text diff shows which lines changed; this shows what those lines are now ' +
+      'CONNECTED to. Reports: which screens the user sees change; 🕰 reactivated legacy ' +
+      'paths (a new edge into code the PR does not touch and nobody has committed to in ' +
+      'months — the classic "our change silently switched execution onto stale code that ' +
+      'returns null and crashes the frontend"); ⚠️ contract risk (things the PR changes ' +
+      'that untouched consumers still call, with unguarded dereferences flagged at the ' +
+      'call site); 💥 flows left pointing at something deleted; cross-app impact on every ' +
+      'app in contextifly.workspace.json; and a ranked test scope. Use before merging any ' +
+      'PR whose blast radius is not obvious.',
+    {
+      projectDir: projectDirParam,
+      ref: z
+        .string()
+        .optional()
+        .describe('Branch or sha holding the change, e.g. "feature/checkout-v2" or "origin/pr-123".'),
+      base: z
+        .string()
+        .optional()
+        .describe('What it merges into. Defaults to master, then main.'),
+      patch: z
+        .string()
+        .optional()
+        .describe('Path to a .diff/.patch file, applied on top of base — for a PR you have not fetched.'),
+    },
+    async ({ projectDir, ref, base, patch }) => {
+      try {
+        return text(simulatePr(projectDir, { ref, base, patch }));
       } catch (err) {
         return errorText(err);
       }

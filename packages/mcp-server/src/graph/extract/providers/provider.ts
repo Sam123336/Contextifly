@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import * as path from 'node:path';
-import type { GraphEdge, GraphNode, ProjectGraph, StoredFileSymbols } from '../types';
+import type { GraphEdge, GraphNode, ProjectGraph, StoredFileSymbols } from '../../types';
 
 /**
  * A provider compiles one slice of the project (a framework, a config format,

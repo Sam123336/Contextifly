@@ -1,7 +1,8 @@
-import { execSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { graphDir } from './store';
+import { graphDir } from './graph-store';
 
 const GIT_STATE_FILE = 'git-state.json';
 
@@ -29,9 +30,11 @@ export interface GitState {
 
 function git(root: string, args: string[]): string | null {
   try {
-    return execSync(`git ${args.join(' ')}`, {
+    // execFile, not a shell string: paths and refs may contain spaces or globs.
+    return execFileSync('git', args, {
       cwd: root,
       stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: 32 * 1024 * 1024,
     })
       .toString()
       .trim();
@@ -92,6 +95,90 @@ function equal(a: GitState | null, b: GitState | null): boolean {
  */
 export function ensureGitState(root: string, saved: GitState | null, current: GitState | null): void {
   if (current && !equal(saved, current)) saveGitState(root, current);
+}
+
+// --- PR / fleet support -----------------------------------------------------
+
+/** Resolve a ref (branch, tag, sha) to a full sha, or null when it does not exist. */
+export function revParse(root: string, ref: string): string | null {
+  return git(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
+}
+
+/**
+ * Files a PR touches: the three-dot diff (base...head) — changes on head since
+ * it forked from base, which is exactly what a PR shows and excludes commits
+ * that landed on base in the meantime.
+ */
+export function changedFiles(root: string, base: string, head: string): string[] {
+  const out = git(root, ['diff', '--name-only', `${base}...${head}`]);
+  return out ? out.split('\n').filter(Boolean) : [];
+}
+
+/** Files touched by a unified diff, read from its `+++ b/<path>` headers. */
+export function patchFiles(patch: string): string[] {
+  const files = new Set<string>();
+  for (const m of patch.matchAll(/^\+\+\+ (?:b\/)?(.+)$/gm)) {
+    const file = m[1].trim();
+    if (file && file !== '/dev/null') files.add(file);
+  }
+  return [...files];
+}
+
+/**
+ * Days since a file's last commit, or null when git has no record of it.
+ * The age signal behind "this PR just wired traffic into code nobody has
+ * touched in a year".
+ */
+export function lastCommitDays(root: string, file: string, now = Date.now()): number | null {
+  const ts = git(root, ['log', '-1', '--format=%ct', '--', file]);
+  if (!ts) return null;
+  const seconds = Number(ts.split('\n')[0]);
+  if (!Number.isFinite(seconds)) return null;
+  return Math.floor((now - seconds * 1000) / 86_400_000);
+}
+
+/**
+ * Run `fn` against a detached worktree checked out at `ref`, then clean up.
+ * Non-destructive by construction: the developer's own checkout, branch, and
+ * uncommitted work are never touched — this is what lets us index the "after"
+ * side of a PR, or a consumer app's master, while you keep working.
+ */
+export function withWorktree<T>(root: string, ref: string, fn: (dir: string) => T): T {
+  const parent = mkdtempSync(path.join(tmpdir(), 'contextifly-wt-'));
+  const dir = path.join(parent, 'tree'); // git requires a non-existent path
+  const added = git(root, ['worktree', 'add', '--detach', '--force', dir, ref]);
+  if (added === null) {
+    rmSync(parent, { recursive: true, force: true });
+    throw new Error(`Could not create a git worktree at \`${ref}\` — does that ref exist?`);
+  }
+  try {
+    return fn(dir);
+  } finally {
+    git(root, ['worktree', 'remove', '--force', dir]);
+    rmSync(parent, { recursive: true, force: true });
+  }
+}
+
+/** True when the working tree has uncommitted changes — or when git can't say. */
+export function isDirty(root: string): boolean {
+  const out = git(root, ['status', '--porcelain']);
+  return out === null ? true : out.length > 0; // unknown → never serve a cached graph
+}
+
+/** A file's exact content at a ref, without checking anything out. */
+export function showFile(root: string, ref: string, file: string): string | null {
+  return git(root, ['show', `${ref}:${file}`]);
+}
+
+/** Apply a unified diff inside a worktree. Throws with git's own reason on conflict. */
+export function applyPatch(dir: string, patchFile: string): void {
+  const ok = git(dir, ['apply', '--3way', '--whitespace=nowarn', patchFile]);
+  if (ok === null) {
+    throw new Error(
+      `\`git apply\` failed for ${path.basename(patchFile)} — the patch does not apply cleanly ` +
+        'to the base commit. Re-export it against the current base, or pass a branch/sha instead.',
+    );
+  }
 }
 
 /**

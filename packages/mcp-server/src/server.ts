@@ -2,8 +2,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { MCP_TOOL_NAMES, type ScreenshotRecord } from '@contextifly/shared';
 import { z } from 'zod/v3';
 import { BackendClient, BackendError } from './backend-client';
-import { recordScreenshotSavings } from './graph/stats';
-import { registerGraphTools } from './graph/tools';
+import { recordScreenshotSavings } from './graph/store/usage-ledger';
+import { registerGraphTools } from './graph/mcp/tools';
 
 export interface BuildServerOptions {
   backend: BackendClient;

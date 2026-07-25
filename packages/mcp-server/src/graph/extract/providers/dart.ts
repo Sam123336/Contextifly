@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
-import type { ProjectGraph } from '../types';
+import type { ProjectGraph } from '../../types';
 import {
   GraphSink,
   discoverFiles,
