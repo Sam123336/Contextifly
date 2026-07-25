@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "bundle:plugin": "esbuild src/index.ts --bundle --platform=node --target=node18 --format=cjs --outfile=bundle/index.cjs",
     "start": "node dist/index.js",
-    "test": "echo \"no tests\" && exit 0",
+    "test": "tsc -p tsconfig.json && node dist/graph/selfcheck.js",
     "lint": "echo \"no lint\" && exit 0"
   },
   "dependencies": {

@@ -4,18 +4,16 @@ import {
   loadFeatureConfig,
   renderFeature,
   renderFeatureList,
-} from './graph/features';
-import { saveGraphHtml } from './graph/html';
-import { indexProject } from './graph/indexer';
-import {
-  analyzeProject,
-  GraphIndex,
-  renderGraphDiff,
-  renderProjectMap,
-  searchNodes,
-} from './graph/queries';
-import { renderSavingsReport } from './graph/stats';
-import { saveSavingsHtml } from './graph/stats-html';
+} from './graph/analyze/features';
+import { saveGraphHtml } from './graph/render/graph-html';
+import { indexProject } from './graph/extract/indexer';
+import { GraphIndex } from './graph/analyze/graph-index';
+import { analyzeProject } from './graph/analyze/health';
+import { searchNodes } from './graph/analyze/search';
+import { renderGraphDiff } from './graph/render/history';
+import { renderProjectMap } from './graph/render/project-map';
+import { renderSavingsReport } from './graph/store/usage-ledger';
+import { saveSavingsHtml } from './graph/render/savings-html';
 import {
   graphDir,
   listSnapshots,
@@ -23,7 +21,7 @@ import {
   loadSnapshot,
   saveGraph,
   staleFileCount,
-} from './graph/store';
+} from './graph/store/graph-store';
 
 // ---- terminal branding ------------------------------------------------------
 

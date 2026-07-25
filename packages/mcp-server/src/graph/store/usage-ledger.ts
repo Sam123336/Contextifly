@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { graphDir } from './store';
+import { graphDir } from './graph-store';
 
 /**
  * Exploration-avoided ledger.

@@ -10,7 +10,7 @@
       "name": "contextifly",
       "source": "./packages/mcp-server",
       "displayName": "Contextifly",
-      "description": "Persistent context engine — an eye and a memory for your AI. 16 tools: Screenshot Blueprint eye-loop (screenshot → wireframe → mapped to the code that implements it → design variants), live Software Knowledge Graph (React/Next.js, NestJS + Flutter — full-stack, incremental), flow tracing, what-if simulation, visual Mermaid explanations, impact analysis + regression risk, architecture score, feature graph, temporal timeline, token-savings report, and the Rosetta framework-translator skill (onboard into Django/Spring/FastAPI/Flask/Go/Rust codebases through the framework you already know). Interactive visualization + CLI. 100% local.",
+      "description": "Persistent context engine — an eye and a memory for your AI. 17 tools: Screenshot Blueprint eye-loop (screenshot → wireframe → mapped to the code that implements it → design variants), live Software Knowledge Graph (React/Next.js, NestJS + Flutter — full-stack, incremental), PR simulation (indexes before AND after a pull request and subtracts the graphs, so it catches reactivated legacy paths a text diff cannot show), cross-app impact (one backend, many apps — joined on the endpoints they share, each app analysed at its master branch), flow tracing, what-if simulation, visual Mermaid explanations, impact analysis + regression risk, architecture score, feature graph, temporal timeline, token-savings report, and the Rosetta framework-translator skill (onboard into Django/Spring/FastAPI/Flask/Go/Rust codebases through the framework you already know). Interactive visualization + CLI. 100% local.",
       "version": "1.0.0",
       "author": {
         "name": "Contextifly"

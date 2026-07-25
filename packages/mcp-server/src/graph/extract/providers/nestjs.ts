@@ -7,7 +7,7 @@ import {
   type Decorator,
   type SourceFile,
 } from 'ts-morph';
-import type { GraphNode, NodeType, ProjectGraph } from '../types';
+import type { GraphNode, NodeType, ProjectGraph } from '../../types';
 import {
   GraphSink,
   discoverFiles,

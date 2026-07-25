@@ -9,7 +9,7 @@ import {
   type JsxSelfClosingElement,
   type SourceFile,
 } from 'ts-morph';
-import type { GraphNode, ProjectGraph, StoredFileSymbols } from '../types';
+import type { GraphNode, ProjectGraph, StoredFileSymbols } from '../../types';
 import {
   GraphSink,
   discoverFiles,

@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import * as path from 'node:path';
-import type { ProjectGraph } from './types';
+import type { ProjectGraph } from '../types';
 
 const DIR_NAME = '.pixelcontextifly';
 const GRAPH_FILE = 'graph.json';

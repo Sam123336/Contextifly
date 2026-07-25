@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import * as path from 'node:path';
-import { computeSavings, type SavingsSummary } from './stats';
-import { graphDir } from './store';
+import { computeSavings, type SavingsSummary } from '../store/usage-ledger';
+import { graphDir } from '../store/graph-store';
 
 /**
  * Render the exploration-avoided analytics as a fully self-contained styled

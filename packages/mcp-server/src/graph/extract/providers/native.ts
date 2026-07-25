@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
-import type { ProjectGraph } from '../types';
+import type { ProjectGraph } from '../../types';
 import { stripComments } from './dart';
 import { GraphSink, discoverFiles, type Provider, type ProviderOutput } from './provider';
 

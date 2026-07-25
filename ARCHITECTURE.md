@@ -6,17 +6,20 @@ that powers deterministic software intelligence.
 
 ## The pipeline
 
+_Code-level map of where all of this lives: [CODE_ARC.md](CODE_ARC.md)._
+
 ```
 Providers → Versioned IR → Normalizer → Algorithms → AI
 ```
 
 | Stage | What it does | Where it lives |
 | ----- | ------------ | -------------- |
-| **Providers** | Compile one slice of the project (a framework, a spec format, a config file) into IR nodes and edges | `packages/mcp-server/src/graph/providers/` |
+| **Providers** | Compile one slice of the project (a framework, a spec format, a config file) into IR nodes and edges | `packages/mcp-server/src/graph/extract/providers/` |
 | **IR** | The versioned node/edge schema — the stable contract everything else is written against | `packages/mcp-server/src/graph/types.ts`, spec in `docs/GRAPH-SPEC.md` |
-| **Normalizer** | Assigns framework-agnostic semantic roles (`entry-point`, `business-logic`, `data-model`, …) on top of syntax-level types | `packages/mcp-server/src/graph/normalizer.ts` |
-| **Algorithms** | Impact analysis, traces, diffs, architecture scoring, project maps — pure graph computation, provider-agnostic | `packages/mcp-server/src/graph/queries.ts` and friends |
-| **AI** | Explains, summarizes, plans — always the last step | MCP tools / skills |
+| **Normalizer** | Assigns framework-agnostic semantic roles (`entry-point`, `business-logic`, `data-model`, …) on top of syntax-level types | `packages/mcp-server/src/graph/extract/normalizer.ts` |
+| **Algorithms** | Impact analysis, traces, diffs, architecture scoring, project maps — pure graph computation, provider-agnostic | `packages/mcp-server/src/graph/analyze/` |
+| **Rendering** | Turns analyzer output into markdown, Mermaid, HTML | `packages/mcp-server/src/graph/render/` |
+| **AI** | Explains, summarizes, plans — always the last step | `packages/mcp-server/src/graph/mcp/tools.ts` + `skills/` |
 
 ## The three rules
 

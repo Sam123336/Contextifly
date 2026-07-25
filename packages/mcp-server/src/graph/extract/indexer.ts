@@ -1,13 +1,13 @@
 import * as path from 'node:path';
-import { gitHead } from './git';
+import { gitHead } from '../store/git';
 import { normalize } from './normalizer';
 import { dartProvider } from './providers/dart';
 import { frontendProvider } from './providers/frontend';
 import { nativeProvider } from './providers/native';
 import { nestjsProvider } from './providers/nestjs';
 import { GraphSink, type Provider } from './providers/provider';
-import { loadGraph } from './store';
-import type { GraphEdge, GraphNode, IndexStats, ProjectGraph } from './types';
+import { loadGraph } from '../store/graph-store';
+import type { GraphEdge, GraphNode, IndexStats, ProjectGraph } from '../types';
 
 // Re-exported for callers that reason about Next.js file conventions.
 export { apiRouteForFile, routeForFile } from './providers/frontend';
