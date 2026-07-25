@@ -15,6 +15,16 @@ import { renderProjectMap } from './graph/render/project-map';
 import { renderSavingsReport } from './graph/store/usage-ledger';
 import { saveSavingsHtml } from './graph/render/savings-html';
 import {
+  diffPermissions,
+  installPermissions,
+  renderDoctor,
+  renderInstallResult,
+  settingsPath,
+  type DoctorInput,
+  type Scope,
+} from './permissions';
+import { permissionPlan } from './tool-manifest';
+import {
   graphDir,
   listSnapshots,
   loadGraph,
@@ -53,6 +63,69 @@ function useColor(): boolean {
   return Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
 }
 
+/**
+ * init / doctor / permissions — the setup path.
+ *
+ * One engine, three doors: `permissions` writes, `doctor` reports, `init` does
+ * both plus a first index. Scope defaults to project (a repo-local change is the
+ * reversible one); `--user` applies it machine-wide.
+ */
+function setup(cmd: string, rest: string[]): void {
+  const flags = new Set(rest.filter((a) => a.startsWith('-')));
+  // `permissions install` reads better than `permissions`, so accept the verb
+  // and don't mistake it for a directory.
+  const positional = rest.filter((a) => !a.startsWith('-') && a !== 'install' && a !== 'check');
+  const root = path.resolve(positional[0] ?? '.');
+  const scope: Scope = flags.has('--user') ? 'user' : 'project';
+  const mode = flags.has('--compact') ? 'compact' : 'explicit';
+  const plan = permissionPlan(mode);
+
+  process.stdout.write(brandLine());
+
+  if (cmd === 'init') {
+    const { graph, stats } = indexProject(root);
+    saveGraph(graph);
+    saveGraphHtml(graph);
+    console.log(`✓ Indexed ${stats.files} files (${stats.durationMs}ms) → .pixelcontextifly/`);
+    console.log(renderInstallResult(installPermissions(scope, root, plan, { enableMcpServer: true }), scope));
+    console.log('');
+    console.log(renderDoctor(doctorInput(root), mode));
+    return;
+  }
+
+  if (cmd === 'permissions') {
+    if (flags.has('--dry-run')) {
+      const diff = diffPermissions(settingsPath(scope, root), plan);
+      console.log(
+        diff.missingAllow.length === 0 && diff.missingAsk.length === 0
+          ? 'Nothing to add — already up to date.'
+          : ['Would add to ' + settingsPath(scope, root) + ':', '', ...diff.missingAllow.map((r) => `  allow  ${r}`), ...diff.missingAsk.map((r) => `  ask    ${r}`)].join('\n'),
+      );
+      return;
+    }
+    console.log(renderInstallResult(installPermissions(scope, root, plan, { enableMcpServer: true }), scope));
+    return;
+  }
+
+  console.log(renderDoctor(doctorInput(root), mode));
+}
+
+function doctorInput(root: string): DoctorInput {
+  const graph = loadGraph(root);
+  return {
+    projectDir: root,
+    graph: graph
+      ? {
+          version: graph.version,
+          nodes: graph.nodes.length,
+          edges: graph.edges.length,
+          indexedAt: graph.indexedAt,
+        }
+      : null,
+    staleFiles: graph ? staleFileCount(graph) : null,
+  };
+}
+
 function banner(): string {
   if (!useColor()) {
     return ['', ...BANNER_LINES, TAGLINE, ''].join('\n');
@@ -79,12 +152,24 @@ Usage: contextifly <command> [args]        (no command → MCP stdio server)
   diff    <dir> [snapshot] Compare current graph against a history snapshot
   feature <dir> [name]     List features, or show one feature's full dossier
   savings <dir>            Exploration-avoided report (files, tokens, latency)
+
+  init    [dir]            Index the project and set up Claude Code permissions
+  doctor  [dir]            Health check: graph, Claude Code, permissions
+  permissions [dir]        Install the recommended allowlist (--user | --project, --compact)
   help                     Show this help
+
+Local tools read your repo and write only to .pixelcontextifly/, so \`permissions\`
+pre-approves them. Screenshot tools upload images to the Contextifly backend and are
+deliberately left prompting.
 
 The graph is stored in <dir>/.pixelcontextifly/ — see docs/GRAPH-SPEC.md for the format.
 `;
 
-const COMMANDS = new Set(['index', 'map', 'analyze', 'impact', 'search', 'diff', 'feature', 'savings', 'help', '--help', '-h']);
+const COMMANDS = new Set([
+  'index', 'map', 'analyze', 'impact', 'search', 'diff', 'feature', 'savings',
+  'init', 'doctor', 'permissions',
+  'help', '--help', '-h',
+]);
 
 /** Handle CLI invocation. Returns false when argv is not a CLI command (→ run MCP server). */
 export function runCli(argv: string[]): boolean {
@@ -103,6 +188,12 @@ export function runCli(argv: string[]): boolean {
 function dispatch(cmd: string, rest: string[]): void {
   if (cmd === 'help' || cmd === '--help' || cmd === '-h') {
     console.log(banner() + USAGE);
+    return;
+  }
+
+  // Setup commands default to the cwd — `contextifly doctor` should just work.
+  if (cmd === 'doctor' || cmd === 'permissions' || cmd === 'init') {
+    setup(cmd, rest);
     return;
   }
 

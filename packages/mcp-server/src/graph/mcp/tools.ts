@@ -15,6 +15,7 @@ import {
   readGitState,
   saveGitState,
 } from '../store/git';
+import { assertKnownTool } from '../../tool-manifest';
 import { renderImpactAcrossApps } from '../analyze/fleet';
 import { saveGraphHtml } from '../render/graph-html';
 import { indexProject } from '../extract/indexer';
@@ -53,6 +54,10 @@ export function registerGraphTools(server: McpServer): void {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     handler: (args: any) => Promise<{ isError?: boolean; content?: { type: 'text'; text: string }[] }>,
   ): void => {
+    // A tool absent from the manifest has no trust class, so `contextifly
+    // permissions` would silently leave it un-allowlisted and users would get
+    // surprise prompts on upgrade. Fail here instead — loudly, in development.
+    assertKnownTool(name);
     (server.tool as CallableFunction)(
       name,
       description,

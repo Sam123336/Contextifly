@@ -289,6 +289,29 @@ Works with any endpoint that speaks the OpenAI Chat Completions API and has a vi
 | `graph_timeline` | The whole architecture's evolution, dated and git-commit-tagged |
 | `token_savings` | 📊 Exploration-avoided report: how many files the AI *didn't* have to read (estimated, per-question baseline), measured answer sizes + latency, estimated reduction %, and real measured screenshot-compression savings — every number labeled measured or estimated. Also available as `contextifly savings .` in the CLI |
 
+### 🔐 Setup & permissions
+
+```bash
+npx contextifly init          # index the project + set up Claude Code permissions
+npx contextifly doctor        # health check: graph, Claude Code, permissions
+```
+
+Claude Code asks before every MCP tool call. `init` pre-approves the ones that deserve it and leaves the ones that don't — no JSON to copy:
+
+| Class | Tools | Pre-approved? |
+|---|---|---|
+| **Local** | the 16 graph tools — `index_project`, `trace_flow`, `simulate_pr`, `impact_across_apps`, … | ✅ yes — they only read your repo and write to `.pixelcontextifly/`, like ripgrep or eslint |
+| **Network** | `analyze_screenshot`, `get_screenshot` | ❌ no — they upload an image to the Contextifly backend, so they stay opt-in |
+
+That's the whole security story: **local tools just work; anything that leaves your machine still asks.** Even though it's our own backend, encrypted and authenticated — transmitting data is a different trust decision from reading a file, and it stays yours.
+
+- `--user` applies it to every project on the machine; default is this project only
+- `--dry-run` prints the rules without writing
+- `--compact` writes 6 server-level rules instead of 36 per-tool ones (shorter, and new tools are covered automatically — verify the network tools still prompt on your Claude Code version)
+- `contextifly doctor` reports missing rules after an upgrade adds tools, and warns if a network tool ever ends up pre-approved
+
+The tool list and its trust classes live in one place, [`src/tool-manifest.ts`](packages/mcp-server/src/tool-manifest.ts) — the server refuses to start if a tool is registered without a trust class, so the allowlist can't silently go stale.
+
 ### 🤖 Bundled skills (zero setup)
 
 Skills are instructions, not code — they tell the AI which tool to reach for, in what order, and what it may claim about the result. Full documentation, for users and maintainers: **[SKILLS.md](SKILLS.md)**.

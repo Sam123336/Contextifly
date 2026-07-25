@@ -10,6 +10,13 @@ import assert from 'node:assert/strict';
 import { endpointMatch, parseApiId, pathShape, toEndpoint } from './analyze/endpoints';
 import { patchFiles } from './store/git';
 import { firstUnguardedChain } from './analyze/pr-simulation';
+import {
+  assertKnownTool,
+  permissionPlan,
+  SERVER_ALIASES,
+  TOOLS,
+  toolsByTrust,
+} from '../tool-manifest';
 
 function checkPathShape(): void {
   // The three spellings of the same endpoint, one per provider.
@@ -92,7 +99,41 @@ function checkPatchFiles(): void {
   assert.deepEqual(patchFiles(patch), ['src/orders.service.ts']);
 }
 
-const checks = [checkPathShape, checkEndpointMatch, checkGuardSniff, checkPatchFiles];
+function checkPermissionPlan(): void {
+  const explicit = permissionPlan('explicit');
+  const compact = permissionPlan('compact');
+  const network = toolsByTrust('network');
+  assert.ok(network.length > 0, 'network tools must exist for this check to mean anything');
+
+  // The trust boundary: no network tool may ever land in `allow`, in either mode.
+  for (const plan of [explicit, compact]) {
+    for (const tool of network) {
+      assert.ok(
+        !plan.allow.some((rule) => rule.endsWith(`__${tool}`)),
+        `${tool} must never be pre-approved — it leaves the machine`,
+      );
+      assert.ok(
+        plan.ask.some((rule) => rule.endsWith(`__${tool}`)),
+        `${tool} must be in "ask" so it keeps prompting`,
+      );
+    }
+  }
+
+  // Both install paths are covered, so the allowlist works however it was installed.
+  for (const server of SERVER_ALIASES) {
+    assert.ok(explicit.allow.some((r) => r.startsWith(`mcp__${server}__`)), `missing rules for ${server}`);
+  }
+  assert.equal(explicit.allow.length, toolsByTrust('local').length * SERVER_ALIASES.length);
+  assert.equal(compact.allow.length, SERVER_ALIASES.length);
+
+  // Every tool is classified — an unclassified tool would silently miss the allowlist.
+  assert.equal(TOOLS.length, toolsByTrust('local').length + network.length + toolsByTrust('destructive').length);
+  assert.equal(new Set(TOOLS.map((t) => t.name)).size, TOOLS.length, 'duplicate tool in the manifest');
+  assertKnownTool('simulate_pr');
+  assert.throws(() => assertKnownTool('not_a_real_tool'), /missing from src\/tool-manifest/);
+}
+
+const checks = [checkPathShape, checkEndpointMatch, checkGuardSniff, checkPatchFiles, checkPermissionPlan];
 for (const check of checks) {
   check();
   console.log(`✓ ${check.name}`);
