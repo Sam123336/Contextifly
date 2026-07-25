@@ -3,6 +3,7 @@
 > **ARCHITECTURE.md** says *why* the system is shaped this way and what the rules are.
 > **This file** says *where the code is* and *what happens when*. Read this one first
 > if you're about to change something.
+> **SKILLS.md** covers the four bundled skills — how they work and how to add one.
 
 ---
 
@@ -215,7 +216,7 @@ notebook, not as part of the product — and don't wire it in without deciding i
 | add an LLM provider | `backend/src/llm/providers/` — one interface, no other changes |
 | change the screenshot pipeline | `backend/src/queue/screenshot.processor.ts` |
 | add a type both sides use | `packages/shared/src/index.ts` |
-| teach the AI a workflow, not a capability | `packages/mcp-server/skills/<name>/SKILL.md` |
+| teach the AI a workflow, not a capability | `packages/mcp-server/skills/<name>/SKILL.md` — see [SKILLS.md](SKILLS.md) |
 
 If your change doesn't fit any row, that's a signal worth taking seriously — see the
 governance section of `ARCHITECTURE.md` before building it.

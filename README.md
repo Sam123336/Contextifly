@@ -291,6 +291,8 @@ Works with any endpoint that speaks the OpenAI Chat Completions API and has a vi
 
 ### 🤖 Bundled skills (zero setup)
 
+Skills are instructions, not code — they tell the AI which tool to reach for, in what order, and what it may claim about the result. Full documentation, for users and maintainers: **[SKILLS.md](SKILLS.md)**.
+
 - **codegraph-copilot** — "explain this project", "find the payment flow", "estimate this feature", "break it into tickets", root-cause analysis via graph + git history
 - **codegraph-refactor** — prioritized refactoring plans where every suggestion is impact-checked first; finds duplicate and structurally identical components and plans the merge with the verified call-site list
 - **codegraph-rosetta** — framework translator: know NestJS but landed in a Django / Spring Boot / FastAPI / Flask / Go / Rust codebase? It detects the stack, translates every concept into the framework you know (controllers ↔ views, DI ↔ `Depends()`, guards ↔ permission classes…), and walks you through *this* repo's real files — mental-model gotchas included
