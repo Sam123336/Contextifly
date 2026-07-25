@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "enabledMcpjsonServers": ["contextifly"],
+  "permissions": {
+    "allow": [
+      "mcp__contextifly__index_project",
+      "mcp__contextifly__get_project_map",
+      "mcp__contextifly__search_graph",
+      "mcp__contextifly__get_impact",
+      "mcp__contextifly__trace_flow",
+      "mcp__contextifly__what_if",
+      "mcp__contextifly__simulate_pr",
+      "mcp__contextifly__impact_across_apps",
+      "mcp__contextifly__analyze_project",
+      "mcp__contextifly__get_feature",
+      "mcp__contextifly__explain_visually",
+      "mcp__contextifly__match_screenshot",
+      "mcp__contextifly__blueprint_screenshot",
+      "mcp__contextifly__graph_diff",
+      "mcp__contextifly__graph_timeline",
+      "mcp__contextifly__token_savings",
+
+      "mcp__plugin_contextifly_contextifly__index_project",
+      "mcp__plugin_contextifly_contextifly__get_project_map",
+      "mcp__plugin_contextifly_contextifly__search_graph",
+      "mcp__plugin_contextifly_contextifly__get_impact",
+      "mcp__plugin_contextifly_contextifly__trace_flow",
+      "mcp__plugin_contextifly_contextifly__what_if",
+      "mcp__plugin_contextifly_contextifly__simulate_pr",
+      "mcp__plugin_contextifly_contextifly__impact_across_apps",
+      "mcp__plugin_contextifly_contextifly__analyze_project",
+      "mcp__plugin_contextifly_contextifly__get_feature",
+      "mcp__plugin_contextifly_contextifly__explain_visually",
+      "mcp__plugin_contextifly_contextifly__match_screenshot",
+      "mcp__plugin_contextifly_contextifly__blueprint_screenshot",
+      "mcp__plugin_contextifly_contextifly__graph_diff",
+      "mcp__plugin_contextifly_contextifly__graph_timeline",
+      "mcp__plugin_contextifly_contextifly__token_savings"
+    ]
+  }
+}
