@@ -9,19 +9,16 @@
 
 ## 1. What this repo actually is
 
-Two products that share one monorepo, one type package, and one idea:
+One product — **the memory** — built around one idea:
 
-| | **The eye** | **The memory** |
-|---|---|---|
-| Question | "what is on this screen?" | "how does this codebase fit together?" |
-| Input | a screenshot (PNG/JPEG/WebP) | your source code |
-| Work | LLM vision → structured markdown | static parsing → a graph |
-| Output | ~95% fewer vision tokens | deterministic answers about structure |
-| Runs | on a server (needs an LLM key) | 100% locally (no network at all) |
-| Lives in | `packages/backend` + `packages/mcp-server/src/server.ts` | `packages/mcp-server/src/graph/` |
-
-They meet in one place: `blueprint_screenshot`, which takes the eye's output and maps
-every element it saw onto the memory's nodes — screenshot → the code that renders it.
+| | **The memory** |
+|---|---|
+| Question | "how does this codebase fit together?" |
+| Input | your source code |
+| Work | static parsing → a graph |
+| Output | deterministic answers about structure |
+| Runs | 100% locally (no network at all) |
+| Lives in | `packages/mcp-server/src/graph/` |
 
 **Everything reaches the user through the MCP server.** It's the front door: Claude
 Code (and any MCP client) talks to it over stdio, and the same binary doubles as a CLI.
@@ -35,74 +32,28 @@ packages/
 ├── mcp-server/     ← the product. MCP tools + CLI + the whole graph engine
 │   ├── src/index.ts          stdio entry point (or hands off to the CLI)
 │   ├── src/cli.ts            `contextifly map|analyze|impact|search|savings|feature|diff`
-│   ├── src/server.ts         the 2 screenshot tools; delegates the rest to graph/mcp/tools.ts
-│   ├── src/backend-client.ts the only file that makes network calls
+│   ├── src/server.ts         registers the tools; delegates to graph/mcp/tools.ts
 │   ├── src/graph/            the graph engine — see its own README.md
 │   └── skills/               4 bundled skills the AI loads (copilot, refactor, rosetta, whatif)
 │
-├── backend/        ← NestJS API: upload a screenshot, get markdown back
-├── shared/         ← types both sides import (ScreenshotRecord, LlmOverride, MCP_TOOL_NAMES)
-├── vscode-extension/  ← paste or drop an image into VS Code, get markdown inline
-└── render/         ← R&D spike, not wired to the product (see §7)
+├── shared/         ← shared TypeScript types (MCP_TOOL_NAMES)
+└── render/         ← R&D spike, not wired to the product (see §6)
 ```
 
 Dependency direction, and it only goes one way:
 
 ```mermaid
 flowchart LR
-  VS[vscode-extension] --> BE[backend]
-  MCP[mcp-server] --> BE
-  MCP --> G[graph engine<br/>local only]
-  VS --> SH[shared]
-  MCP --> SH
-  BE --> SH
+  MCP[mcp-server] --> G[graph engine<br/>local only]
+  MCP --> SH[shared]
 ```
 
-The graph engine depends on **nothing** — not the backend, not the network, not an
-LLM. That's deliberate: it's what makes every structural answer reproducible.
+The graph engine depends on **nothing** — not the network, not an LLM. That's
+deliberate: it's what makes every structural answer reproducible.
 
 ---
 
-## 3. Flow A — a screenshot becomes markdown
-
-```mermaid
-sequenceDiagram
-  participant C as Claude Code
-  participant M as mcp-server
-  participant A as backend API
-  participant Q as BullMQ + Redis
-  participant L as LLM provider
-  C->>M: analyze_screenshot(filePath)
-  M->>A: POST /screenshots (multipart)
-  A->>A: save file, row status=queued
-  A->>Q: enqueue job
-  A-->>M: 202 { id }
-  Q->>L: vision call with the UI-analysis prompt
-  L-->>Q: raw markdown
-  Q->>Q: normalize sections + count token savings
-  Q->>A: row status=done
-  loop until done
-    M->>A: GET /screenshots/:id
-  end
-  M-->>C: structured markdown (+ savings)
-```
-
-Read it in this order:
-
-1. `packages/mcp-server/src/server.ts` — the tool, and the polling loop
-2. `packages/backend/src/screenshots/screenshots.controller.ts` — `@Post()` / `@Get(':id')`
-3. `packages/backend/src/queue/screenshot.processor.ts` — **the actual work happens here**
-4. `packages/backend/src/llm/providers/` — gemini / openai / anthropic behind one interface
-5. `packages/backend/src/markdown/markdown.service.ts` — normalizes the LLM's output and
-   reports which sections came back missing
-
-Two things worth knowing:
-
-- The upload responds **202 immediately**; the MCP tool polls. Nothing blocks a worker.
-- A caller can bring their own LLM key per request (`LLM_OVERRIDE_HEADERS` in `shared`),
-  so the server's key is a default, not a requirement.
-
-## 4. Flow B — code becomes answers
+## 3. Flow A — code becomes answers
 
 ```mermaid
 flowchart LR
@@ -133,9 +84,9 @@ incremental — only dirty files and their importers get re-parsed.
 
 **Cross-provider linking happens through node ids, not code.** A web `fetch('/orders')`
 and a NestJS `@Get('/orders')` both produce the id `api:GET /orders`, so they connect
-without either parser knowing the other exists. That id scheme is also what makes §5 possible.
+without either parser knowing the other exists. That id scheme is also what makes §4 possible.
 
-## 5. Flow C — pre-merge blast radius
+## 4. Flow B — pre-merge blast radius
 
 The newest piece, and the one that needs the most explaining because it works
 differently from everything else: **it builds more than one graph.**
@@ -168,7 +119,7 @@ flowchart TD
 
 Configured by `contextifly.workspace.json` in the backend repo (the tool scaffolds one).
 
-## 6. Where state lives
+## 5. Where state lives
 
 | What | Where | Notes |
 |---|---|---|
@@ -177,13 +128,11 @@ Configured by `contextifly.workspace.json` in the backend repo (the tool scaffol
 | Git position | `.pixelcontextifly/git-state.json` | staleness check without re-parsing anything |
 | Consumer app graphs | `.pixelcontextifly/fleet/<app>.json` | keyed by that app's master sha |
 | Usage ledger | written by `store/usage-ledger.ts` | powers `token_savings` |
-| Screenshots + results | Postgres (sequelize) + upload dir | backend only |
-| Job queue | Redis (BullMQ) | backend only |
 
 Everything in `.pixelcontextifly/` is disposable: delete it and the next `index_project`
 rebuilds it.
 
-## 7. `packages/render` — read this before you touch it
+## 6. `packages/render` — read this before you touch it
 
 An R&D spike: compiling declarative UI into a measurable execution model
 (React IR → Runtime IR → Execution Plan → Scene Frames), validated against React itself.
@@ -191,7 +140,7 @@ Plain `.cjs` scripts, run by hand, **not imported by any shipped package**, and 
 scripts point at a hard-coded path on one developer's machine. Treat it as a lab
 notebook, not as part of the product — and don't wire it in without deciding it graduated.
 
-## 8. Reading order for a new developer
+## 7. Reading order for a new developer
 
 1. `packages/mcp-server/src/graph/types.ts` — 160 lines. The whole data model. Nothing
    else makes sense before this.
@@ -204,7 +153,7 @@ notebook, not as part of the product — and don't wire it in without deciding i
    provider (276 lines). Now you know how source becomes graph.
 6. `ARCHITECTURE.md` — the rules, now that you can see what they're protecting.
 
-## 9. Where does my change go?
+## 8. Where does my change go?
 
 | I want to… | Put it in |
 |---|---|
@@ -213,15 +162,13 @@ notebook, not as part of the product — and don't wire it in without deciding i
 | show an existing answer differently | `graph/render/` |
 | give the AI a new tool | `graph/mcp/tools.ts` — wire an analyzer to a renderer |
 | read git or the filesystem | `graph/store/`, then call it from `analyze/` |
-| add an LLM provider | `backend/src/llm/providers/` — one interface, no other changes |
-| change the screenshot pipeline | `backend/src/queue/screenshot.processor.ts` |
-| add a type both sides use | `packages/shared/src/index.ts` |
+| add a shared type | `packages/shared/src/index.ts` |
 | teach the AI a workflow, not a capability | `packages/mcp-server/skills/<name>/SKILL.md` — see [SKILLS.md](SKILLS.md) |
 
 If your change doesn't fit any row, that's a signal worth taking seriously — see the
 governance section of `ARCHITECTURE.md` before building it.
 
-## 10. Verifying a change
+## 9. Verifying a change
 
 ```bash
 pnpm build                       # typecheck + emit, whole workspace

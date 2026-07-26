@@ -74,7 +74,7 @@ Pure functions over the IR. In: a graph. Out: data. No markdown, no files.
 | File | Answers |
 |---|---|
 | `graph-index.ts` | **Read this second.** The index every other analyzer runs on: `resolve` (name → node), `routeSubtree` (what a screen renders), `dependents` (what breaks if this changes) |
-| `search.ts` | "find X by name", and screenshot-element → component matching |
+| `search.ts` | "find X by name", and UI-element → component matching |
 | `health.ts` | Architecture score: cycles, dead code, unused endpoints, oversized components |
 | `features.ts` | Group the graph into features instead of files |
 | `what-if.ts` | One node: what if I `remove` / `split` / `lazy_load` it? |
@@ -93,7 +93,7 @@ its report.
 |---|---|
 | `project-map.ts` | The route map + navigation Mermaid diagram |
 | `history.ts` | Snapshot diff and the architecture timeline |
-| `visual.ts` | Flow traces, screenshot blueprints, the "explain visually" dossier |
+| `visual.ts` | Flow traces and the "explain visually" dossier |
 | `graph-html.ts` | The interactive `graph.html` |
 | `savings-html.ts` | The token-savings dashboard |
 
