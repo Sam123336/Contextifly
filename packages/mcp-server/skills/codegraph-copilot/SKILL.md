@@ -34,15 +34,6 @@ error dialogs, retry logic) — and read only the specific files the step list n
 never search broadly. If you don't know the endpoints, `search_graph` the domain
 terms first to find them. If no path exists, say so rather than inventing one.
 
-**Screenshot → code / "redesign this screen"**
-Chain: `analyze_screenshot` (gets the markdown incl. the ASCII Screen Sketch) →
-`blueprint_screenshot` with that full markdown. It returns the sketch, a table
-mapping every sketched element to its component/file/screen, the code-side
-render tree, and a design-variant brief. Then produce the 3 variant sketches it
-asks for — from the ASCII only, never by re-reading the image — and tie each
-variant to the matched components so the redesign is actionable. Total cost is
-~1–2k tokens for the whole loop.
-
 **"Visualize state management"**
 Filter the graph to context/hook nodes: `search_graph` for each context, list which
 components `use` each one. Mermaid diagram: contexts/stores as one rank, consuming

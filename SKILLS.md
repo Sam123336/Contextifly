@@ -41,13 +41,12 @@ One call returns a few hundred tokens of *verified* edges plus a Mermaid diagram
 reading is then allowed, but only for the files that call named — behavior the graph can't
 see (validation rules, retry logic, error dialogs).
 
-**Seven playbooks**, each with a fixed tool sequence:
+**Six playbooks**, each with a fixed tool sequence:
 
 | You ask | It runs |
 |---|---|
 | explain this project / onboarding docs | `get_project_map` + `analyze_project` + read entry point & 2–3 highest-degree components |
 | find the X flow | `trace_flow(from, to)` → then only the named files |
-| screenshot → code | `analyze_screenshot` → `blueprint_screenshot` → 3 design variants from the ASCII sketch |
 | visualize state management | `search_graph` per context → who `uses` each → ranked Mermaid |
 | estimate complexity | `get_impact` → S (<5 dependents) / M (5–15) / L (>15 or 3+ routes) |
 | break into tickets | complexity first, then tasks in dependency order: schema → API → state → UI → wiring → tests |

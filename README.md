@@ -15,7 +15,7 @@
 [![NestJS](https://img.shields.io/badge/NestJS-full--stack-E0234E?logo=nestjs&logoColor=white)](#-tools)
 [![Flutter](https://img.shields.io/badge/Flutter-beta-02569B?logo=flutter&logoColor=white)](#-tools)
 
-**[Quick start](#-quick-start-60-seconds) · [Setup](#-setup) · [Your own API key](#-use-your-own-api-key-for-image-reading) · [Tools](#-tools) · [Self-hosting](#-self-hosting)**
+**[Quick start](#-quick-start-60-seconds) · [Setup](#-setup) · [Tools](#-tools) · [Repository layout](#-repository-layout)**
 
 </div>
 
@@ -23,16 +23,16 @@
 
 ## 🤔 What is Contextifly?
 
-Every AI assistant has the same problem: **it forgets your project between conversations.** Each time you ask a question, it searches dozens of files, re-reads the same code, re-analyzes the same screenshots, and guesses at dependencies. You pay in **time, tokens, and wrong answers**.
+Every AI assistant has the same problem: **it forgets your project between conversations.** Each time you ask a question, it searches dozens of files, re-reads the same code, and guesses at dependencies. You pay in **time, tokens, and wrong answers**.
 
-Contextifly fixes this with two engines feeding one **Software Knowledge Graph**:
+Contextifly fixes this with a live **Software Knowledge Graph** of your codebase:
 
-| | 📸 Screenshot Engine | 🕸️ Code Engine |
-|---|---|---|
-| **Input** | UI screenshots (PNG/JPEG/WebP) | Your React/Next.js, NestJS, or Flutter code |
-| **Output** | Structured markdown — screen type, components, layout, design issues | A live graph — components, routes, state, API calls, controllers, services, entities — and how they connect, **frontend to backend**: a `fetch('/orders')` links straight to the controller that handles it |
-| **Saves** | ~95% of vision tokens per screenshot (measured) | Repeated code exploration — a ~25–40-file search becomes one graph query (est. ~90% fewer exploration tokens) |
-| **Runs** | Free hosted backend (or your own key/server) | **100% on your machine — code never leaves it** |
+| | 🕸️ Code Engine |
+|---|---|
+| **Input** | Your React/Next.js, NestJS, or Flutter code |
+| **Output** | A live graph — components, routes, state, API calls, controllers, services, entities — and how they connect, **frontend to backend**: a `fetch('/orders')` links straight to the controller that handles it |
+| **Saves** | Repeated code exploration — a ~25–40-file search becomes one graph query (est. ~90% fewer exploration tokens) |
+| **Runs** | **100% on your machine — code never leaves it** |
 
 ```
 Without Contextifly                      With Contextifly
@@ -65,7 +65,7 @@ claude plugin install contextifly@contextifly
 > show me the project map
 > what breaks if I change ProductCard?
 > trace the flow from /cart to /orders
-> analyze this screenshot with contextifly: /path/to/screenshot.png
+> is this PR safe to merge?
 
 💡 Bonus: open `.pixelcontextifly/graph.html` in any browser — an interactive map of your whole app.
 
@@ -100,7 +100,7 @@ Or from *inside* a Claude Code session:
 /plugin install contextifly@contextifly
 ```
 
-Start a **new** session and the 14 tools + 2 skills are available automatically. Updating later: `claude plugin update contextifly`.
+Start a **new** session and the 15 tools + 4 skills are available automatically. Updating later: `claude plugin update contextifly`.
 
 </details>
 
@@ -192,81 +192,9 @@ The graph itself is plain JSON at `.pixelcontextifly/graph.json` — the format 
 
 ---
 
-## 🔑 Use your own API key for image reading
-
-Screenshot analysis works **out of the box** with the free hosted backend — no key needed. But you can plug in your own LLM key for faster/better/private image reading. Your key is sent per request and **never stored server-side**.
-
-Set these environment variables where Claude Code runs:
-
-| Env var | What it does | Required? |
-|---|---|---|
-| `CONTEXTIFLY_LLM_PROVIDER` | `gemini`, `openai`, `anthropic`, or `openai-compatible` | yes (to enable) |
-| `CONTEXTIFLY_LLM_API_KEY` | Your key for that provider | yes (to enable) |
-| `CONTEXTIFLY_LLM_MODEL` | Model id | only for `openai-compatible` |
-| `CONTEXTIFLY_LLM_BASE_URL` | Endpoint URL | only for `openai-compatible` |
-| `CONTEXTIFLY_BACKEND_URL` | Your own backend instead of the hosted one | no |
-
-<details>
-<summary><b>Example: Google Gemini</b></summary>
-
-```bash
-export CONTEXTIFLY_LLM_PROVIDER=gemini
-export CONTEXTIFLY_LLM_API_KEY=AIza...
-```
-</details>
-
-<details>
-<summary><b>Example: OpenAI</b></summary>
-
-```bash
-export CONTEXTIFLY_LLM_PROVIDER=openai
-export CONTEXTIFLY_LLM_API_KEY=sk-...
-```
-</details>
-
-<details>
-<summary><b>Example: Anthropic Claude</b></summary>
-
-```bash
-export CONTEXTIFLY_LLM_PROVIDER=anthropic
-export CONTEXTIFLY_LLM_API_KEY=sk-ant-...
-```
-</details>
-
-<details>
-<summary><b>Example: Groq / OpenRouter / Ollama / any OpenAI-compatible endpoint</b></summary>
-
-```bash
-export CONTEXTIFLY_LLM_PROVIDER=openai-compatible
-export CONTEXTIFLY_LLM_API_KEY=gsk_...
-export CONTEXTIFLY_LLM_MODEL=llama-3.2-90b-vision-preview
-export CONTEXTIFLY_LLM_BASE_URL=https://api.groq.com/openai/v1
-```
-
-Works with any endpoint that speaks the OpenAI Chat Completions API and has a vision-capable model — Groq, OpenRouter, Together, Fireworks, vLLM, Ollama…
-</details>
-
-| Provider | `provider` value | Default model |
-|---|---|---|
-| Google Gemini | `gemini` | `gemini-2.5-flash-lite` |
-| OpenAI | `openai` | `gpt-4o` |
-| Anthropic Claude | `anthropic` | `claude-3-5-sonnet-latest` |
-| OpenAI-compatible | `openai-compatible` | *(you specify)* |
-
-> 🗒️ **Note:** the key is only for the **screenshot** engine. The code graph never uses any LLM — it's a compiler-style parser that runs entirely on your machine.
-
----
-
 ## 🧰 Tools
 
-14 MCP tools, available the moment the plugin is installed:
-
-### 📸 Screenshots
-
-| Tool | What it does |
-|---|---|
-| `analyze_screenshot` | Screenshot → structured developer markdown (~95% fewer vision tokens), with token-savings stats |
-| `get_screenshot` | Fetch a previous analysis by id |
+15 MCP tools, available the moment the plugin is installed. No API key, no LLM — the graph is built by a compiler-style parser that runs entirely on your machine:
 
 ### 🕸️ Software Knowledge Graph
 
@@ -283,11 +211,10 @@ Works with any endpoint that speaks the OpenAI Chat Completions API and has a vi
 | `analyze_project` | Architecture score 0–100: circular imports, dead code, unused API routes, oversized components, duplicate component names, **structural duplicates** (copy-pasted-then-renamed components caught by JSX-shape fingerprint), usage heatmap, state fan-out |
 | `get_feature` | Think in features, not files: "explain Authentication" → its routes, components, state, APIs, and entry points |
 | `match_screenshot` | "Orange Checkout Button" → the component that implements it + the screens it appears on |
-| `blueprint_screenshot` | 🔥 The full "eye" loop: screenshot analysis (with its ASCII Screen Sketch) → every sketched element mapped to its component/file/screen → the code-side render tree → a brief for 3 design-variant sketches, generated from the tiny ASCII instead of re-reading the image |
 | `search_graph` | Find any component/route/API by name with its full relationship neighborhood |
 | `graph_diff` | What changed architecturally between two snapshots |
 | `graph_timeline` | The whole architecture's evolution, dated and git-commit-tagged |
-| `token_savings` | 📊 Exploration-avoided report: how many files the AI *didn't* have to read (estimated, per-question baseline), measured answer sizes + latency, estimated reduction %, and real measured screenshot-compression savings — every number labeled measured or estimated. Also available as `contextifly savings .` in the CLI |
+| `token_savings` | 📊 Exploration-avoided report: how many files the AI *didn't* have to read (estimated, per-question baseline), measured answer sizes + latency, estimated reduction % — every number labeled measured or estimated. Also available as `contextifly savings .` in the CLI |
 
 ### 🔐 Setup & permissions
 
@@ -296,19 +223,14 @@ npx contextifly init          # index the project + set up Claude Code permissio
 npx contextifly doctor        # health check: graph, Claude Code, permissions
 ```
 
-Claude Code asks before every MCP tool call. `init` pre-approves the ones that deserve it and leaves the ones that don't — no JSON to copy:
+Claude Code asks before every MCP tool call. `init` pre-approves the graph tools — no JSON to copy.
 
-| Class | Tools | Pre-approved? |
-|---|---|---|
-| **Local** | the 16 graph tools — `index_project`, `trace_flow`, `simulate_pr`, `impact_across_apps`, … | ✅ yes — they only read your repo and write to `.pixelcontextifly/`, like ripgrep or eslint |
-| **Network** | `analyze_screenshot`, `get_screenshot` | ❌ no — they upload an image to the Contextifly backend, so they stay opt-in |
-
-That's the whole security story: **local tools just work; anything that leaves your machine still asks.** Even though it's our own backend, encrypted and authenticated — transmitting data is a different trust decision from reading a file, and it stays yours.
+All 15 of them are **local**: they only read your repo and write to `.pixelcontextifly/`, like ripgrep or eslint. That's the whole security story — nothing here leaves your machine, so nothing here needs to keep asking.
 
 - `--user` applies it to every project on the machine; default is this project only
 - `--dry-run` prints the rules without writing
-- `--compact` writes 6 server-level rules instead of 36 per-tool ones (shorter, and new tools are covered automatically — verify the network tools still prompt on your Claude Code version)
-- `contextifly doctor` reports missing rules after an upgrade adds tools, and warns if a network tool ever ends up pre-approved
+- `--compact` writes server-level rules instead of per-tool ones (shorter, and new tools are covered automatically)
+- `contextifly doctor` reports missing rules after an upgrade adds tools
 
 The tool list and its trust classes live in one place, [`src/tool-manifest.ts`](packages/mcp-server/src/tool-manifest.ts) — the server refuses to start if a tool is registered without a trust class, so the allowlist can't silently go stale.
 
@@ -332,85 +254,7 @@ Skills are instructions, not code — they tell the AI which tool to reach for, 
 - 🗺️ **Interactive visualization** — `.pixelcontextifly/graph.html`: force-directed map, color-coded types, search, filters, click any node for its relationships. Works offline, zero dependencies.
 - 🕰️ **Temporal graph** — snapshots on every change, tagged with git commits. Ask "what changed this month?"
 - 🔓 **Open format** — the graph is documented JSON ([spec](docs/GRAPH-SPEC.md)); any MCP client or plain script can use it.
-- 🔒 **Private by design** — source code never leaves your machine. Only screenshots touch a server (and you can self-host that too).
-
----
-
-## 🌐 HTTP API (screenshot backend)
-
-Use the backend without any plugin:
-
-| Method | Path | Description |
-|---|---|---|
-| POST | `/screenshots` | Multipart upload (`file`); enqueues analysis |
-| GET | `/screenshots/:id` | Status + markdown + token savings |
-| GET | `/health` | Liveness check |
-
-Per-request key override headers (key lives only on the in-flight job):
-
-```bash
-curl -X POST https://<backend-url>/screenshots \
-  -H "x-llm-provider: openai" \
-  -H "x-llm-api-key: sk-..." \
-  -F "file=@./screenshot.png"
-```
-
-Headers: `x-llm-provider`, `x-llm-api-key`, `x-llm-model` (optional), `x-llm-base-url` (openai-compatible only).
-
----
-
-## 🏠 Self-hosting
-
-<details>
-<summary><b>Run locally</b></summary>
-
-<br>
-
-Prerequisites: Node.js 20+, pnpm 9+, Docker.
-
-```bash
-pnpm install
-docker compose up -d postgres redis
-cp .env.example packages/backend/.env   # set LLM_API_KEY
-pnpm dev                                # API on http://localhost:3000
-```
-
-Point the plugin at it with `CONTEXTIFLY_BACKEND_URL=http://localhost:3000`.
-
-Server-default LLM config (`packages/backend/.env`):
-
-```bash
-LLM_PROVIDER=gemini   # gemini | openai | anthropic | openai-compatible
-LLM_API_KEY=          # key for the chosen provider
-LLM_MODEL=            # blank → provider default; required for openai-compatible
-LLM_BASE_URL=         # only for openai-compatible
-```
-</details>
-
-<details>
-<summary><b>Deploy on Render (free tier)</b></summary>
-
-<br>
-
-[`render.yaml`](render.yaml) is a ready-made blueprint. Create a free Postgres database ([Neon](https://neon.tech)) and Redis ([Upstash](https://upstash.com)), then on [Render](https://render.com): **New → Blueprint** → pick your fork → fill in `DATABASE_URL`, `REDIS_URL`, and `LLM_API_KEY`. Free-plan note: the service sleeps after ~15 idle minutes and takes ~30–60s to wake.
-</details>
-
-<details>
-<summary><b>Deploy on Azure</b></summary>
-
-<br>
-
-[`deploy/azure.sh`](deploy/azure.sh) provisions Container Apps + managed Postgres + Redis and prints the public URL:
-
-```bash
-az login
-PG_PASSWORD='<strong-pw>' LLM_API_KEY='<your-key>' ./deploy/azure.sh
-```
-
-Redeploys are a button press via the [manual GitHub Actions workflow](.github/workflows/deploy-azure.yml) once the repo secrets/variables documented in that file are set.
-
-Notes for any host: schema is created automatically on boot (Sequelize `synchronize`); single replica by default — uploads are written to local disk and read by the in-process worker. To scale out, mount shared storage at `UPLOAD_DIR`.
-</details>
+- 🔒 **Private by design** — source code never leaves your machine. The graph is built locally and stored in your project folder; no uploads, no account, no key.
 
 ---
 
@@ -423,18 +267,14 @@ Notes for any host: schema is created automatically on boot (Sequelize `synchron
 
 | Package | Purpose |
 |---|---|
-| `packages/backend` | NestJS API + BullMQ worker + multi-provider LLM pipeline |
 | `packages/mcp-server` | MCP server + CLI + graph engine (the plugin) |
 | `packages/shared` | Shared TypeScript types |
-| `packages/vscode-extension` | VS Code clipboard / drag-drop integration |
 
 Rebuild the plugin bundle after changing `packages/mcp-server`:
 
 ```bash
 pnpm --filter @contextifly/mcp-server run bundle:plugin   # → bundle/index.cjs
 ```
-
-**VS Code extension:** drop or paste a screenshot into any editor, or run **"Contextifly: Analyze Image File…"** from the Command Palette; markdown is inserted at the cursor. Configure via `contextifly.*` settings. Package with `cd packages/vscode-extension && pnpm run package`.
 </details>
 
 ---
@@ -444,7 +284,7 @@ pnpm --filter @contextifly/mcp-server run bundle:plugin   # → bundle/index.cjs
 <details>
 <summary><b>Does my code get uploaded anywhere?</b></summary>
 <br>
-No. The code graph is built entirely on your machine by a local parser and stored in your project folder (auto-gitignored). Only <em>screenshots</em> are sent to the analysis backend — and you can self-host that or bring your own key.
+No. The code graph is built entirely on your machine by a local parser and stored in your project folder (auto-gitignored). Nothing is uploaded anywhere.
 </details>
 
 <details>
@@ -457,12 +297,6 @@ React and Next.js (app router + pages router) with full TypeScript-compiler fide
 <summary><b>Do I need to re-index after every change?</b></summary>
 <br>
 No. Every graph tool checks file hashes before answering and auto-refreshes if anything changed. Re-indexing is incremental — milliseconds, not seconds.
-</details>
-
-<details>
-<summary><b>The first screenshot call is slow — why?</b></summary>
-<br>
-The free-tier backend sleeps when idle and takes ~30–60s to wake. Subsequent calls are fast. Self-host or bring your own key to avoid it.
 </details>
 
 ---
