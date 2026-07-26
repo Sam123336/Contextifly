@@ -230,111 +230,304 @@ three things before you ever see a handler:
 `src/tool-manifest.ts` is the registry of record for trust classes; the tools below are
 the ones this map covers. All are `local` — repo in, `.pixelcontextifly/` out.
 
-### Build and inspect
+Every handler below therefore starts from the same two boxes, which are drawn once here
+and left implicit in the per-tool diagrams:
 
-| Tool | Params | Chain |
-|---|---|---|
-| `index_project` | `projectDir` | `extract/indexer.ts:indexProject` → `store/graph-store.ts:saveGraph` → `render/graph-html.ts:saveGraphHtml` → `store/git.ts:saveGitState` |
+```mermaid
+flowchart LR
+  A["MCP call"] --> B["assertKnownTool(name)"]
+  B --> C["loadIndex(projectDir)"]
+  C --> D{"staleReason?"}
+  D -->|"git moved or hashes differ"| E["indexProject + saveGraph<br/>prefix the answer with auto-refreshed"]
+  D -->|"clean"| F["new GraphIndex(graph)"]
+  E --> F
+  F --> G["handler: analyze then render"]
+  G --> H["recordUsage — best effort, success only"]
+```
 
-The fast path matters: if `graphIsFresh()` (git branch + HEAD + main-head unmoved, zero
-changed file hashes) it returns `renderReuse()` — **no rebuild and no file write at all.**
-Otherwise it reports per-type counts plus `reparsed`/`reused` when the run was incremental.
+### `index_project`
 
-| Tool | Params | Chain |
-|---|---|---|
-| `get_project_map` | `projectDir` | `render/project-map.ts:renderProjectMap` — every route with its `routeSubtree` component tree and `calls` edges, plus a Mermaid navigation diagram |
-| `search_graph` | `projectDir`, `query` | `analyze/search.ts:searchNodes` — scores exact 100 / name-prefix 80 / name-substring 60 / id-substring 40, top 20, each with up to 6 in- and out-relations |
+`projectDir` — build or refresh the graph. The one tool that writes the graph.
 
-### Impact and simulation
+```mermaid
+flowchart TD
+  A["index_project(projectDir)"] --> B{"graphIsFresh?<br/>branch + HEAD + main-head unmoved<br/>and zero changed hashes"}
+  B -->|"yes"| C["renderReuse — no rebuild, no file write"]
+  B -->|"no"| D["extract/indexer.ts : indexProject"]
+  D --> E["frontend + nestjs + dart + native providers"]
+  E --> F["GraphSink dedup, richer node wins"]
+  F --> G["repair pass, then normalize roles"]
+  G --> H["sort nodes and edges deterministically"]
+  H --> I["store/graph-store.ts : saveGraph<br/>archives previous to history if contentKey differs"]
+  I --> J["render/graph-html.ts : saveGraphHtml"]
+  J --> K["store/git.ts : saveGitState"]
+  K --> L["per-type counts plus reparsed and reused"]
+```
 
-| Tool | Params | Chain |
-|---|---|---|
-| `get_impact` | `projectDir`, `target` | no separate analyzer — the handler in `tools.ts` composes `index.resolve` → `index.dependents` directly |
+The fast path is the point: a no-op re-index writes nothing at all.
 
-Worth knowing because the thresholds are policy, not math: it takes the **top 3** resolved
-matches, and per match collects the blast radius by walking `calls` (APIs), `uses` →
-`context` (state) and `invokes` (native channels) over every affected id. Risk is
-**High** at ≥3 affected routes or ≥20 dependents, **Medium** at ≥1 route or ≥6, else
-**Low**. Dependent lists are capped at 40 with an "…and N more" tail.
+### `get_project_map`
 
-| Tool | Params | Chain |
-|---|---|---|
-| `what_if` | `projectDir`, `action` (`remove` \| `split` \| `lazy_load`), `target` | `analyze/what-if.ts:whatIf` |
+`projectDir` — the table of contents for everything else.
 
-Resolves to the single best match and simulates: `remove` (what breaks immediately, what's
-at risk transitively, which routes stay safe — `defines`/`imports` in-edges are excluded
-as mechanical, not breakage), `split` (call sites to update, natural boundaries from
-child/state clusters), `lazy_load` (exclusive vs shared subtree, loading boundaries).
+```mermaid
+flowchart LR
+  A["get_project_map(projectDir)"] --> B["index.routes"]
+  B --> C["index.routeSubtree per route<br/>renders plus defines, depth 10"]
+  C --> D["outEdges kind calls, the APIs each screen hits"]
+  D --> E["render/project-map.ts : renderProjectMap"]
+  E --> F["route list with component trees"]
+  E --> G["Mermaid route-to-route nav diagram"]
+```
 
-| Tool | Params | Chain |
-|---|---|---|
-| `simulate_pr` | `projectDir`, `ref?`, `base?`, `patch?` | `analyze/pr-simulation.ts:simulatePr` |
+### `search_graph`
 
-The only tool that builds **more than one graph**. `base` resolves `master` then `main`.
-`graphAt()` short-circuits when the stored graph's `commit` already equals the target sha;
-otherwise `store/git.ts:withWorktree()` checks the ref into a temp dir and indexes it with
-`force: true`. A `.diff`/`.patch` is applied on top of base the same way. Then it subtracts
-edge sets and runs the four analyzers, each computing *behaviour that moved, minus
-everything the PR touched* — plus a fifth section that delegates across repos:
+`projectDir`, `query` — find a node when you do not know its exact name.
 
-1. `userSurface` — routes/screens reachable from the change
-2. `reactivatedLegacy` — a new edge into untouched code whose last commit is older than
-   **180 days** (`LEGACY_DAYS`), bounded to **40** `git log` probes so it can't become a
-   repo scan. This is the incident the tool exists for
-3. `contractRisks` — changed `api`/`service`/`controller`/`entity`/`hook`/`context`/
-   `channel` nodes that untouched consumers still call, with `firstUnguardedChain()`
-   sniffing **12 lines** past each call site for an unguarded dereference
-4. `brokenFlows` — callers left pointing at something removed
-5. `renderCrossApp` — delegates to fleet analysis (below)
+```mermaid
+flowchart LR
+  A["search_graph(projectDir, query)"] --> B["analyze/search.ts : searchNodes"]
+  B --> C["exact name or id, score 100"]
+  B --> D["name starts with, score 80"]
+  B --> E["name contains, score 60"]
+  B --> F["id contains, score 40"]
+  C --> G["sort, take 20"]
+  D --> G
+  E --> G
+  F --> G
+  G --> H["describeRelations, up to 6 in and out edges each"]
+```
 
-Output is capped at 12 rows per section and ends with a `verdict(blockers, risks)` and a
-ranked test scope. Your checkout is never touched.
+### `get_impact`
 
-| Tool | Params | Chain |
-|---|---|---|
-| `impact_across_apps` | `projectDir`, `target` | `analyze/fleet.ts:renderImpactAcrossApps` |
+`projectDir`, `target` — what breaks if I change this, inside one repo.
 
-Needs `contextifly.workspace.json` (scaffolded on first run). Joins repos through
-`analyze/endpoints.ts` — see §4 for why the endpoint is the only shared symbol. Each app
-is indexed at **two** roles: `release` (master → main, from a detached worktree) and
-`checkout` (the branch that repo has open, working tree included) when they differ. Graphs
-cache under `.pixelcontextifly/fleet/` keyed by sha; **a dirty working tree is never
-cached**, because a sha no longer describes what's in it. Up to 6 call sites per endpoint.
+The only tool with no separate analyzer: the handler in `tools.ts` composes two
+`GraphIndex` traversals directly. The thresholds are policy, not math.
 
-The endpoint join itself is the one place confidence is not 1.0: identical shape → 1.0;
-same depth with a parameter meeting a literal → 0.8; a segment-aligned suffix (the classic
-un-set `basePath`) → 0.6, always with the reason attached.
+```mermaid
+flowchart TD
+  A["get_impact(projectDir, target)"] --> B["index.resolve(target)"]
+  B --> C["top 3 matches, rest reported as omitted"]
+  C --> D["index.dependents — reverse walk, every edge kind"]
+  D --> E["group by type: components, files, routes, hooks"]
+  D --> F["blast radius over all affected ids"]
+  F --> G["outEdges calls, the APIs"]
+  F --> H["outEdges uses to context, the state"]
+  F --> I["outEdges invokes, the native channels"]
+  E --> J{"regression risk"}
+  J -->|"3 or more routes, or 20 or more dependents"| K["High"]
+  J -->|"1 or more route, or 6 or more dependents"| L["Medium"]
+  J -->|"otherwise"| M["Low"]
+  E --> N["dependent list capped at 40 plus an and-N-more tail"]
+```
 
-### Explain
+### `what_if`
 
-| Tool | Params | Chain |
-|---|---|---|
-| `trace_flow` | `projectDir`, `from`, `to?` | `render/visual.ts:traceFlow` — with `to`, shortest path over navigation/render/API edges decorated with branches; without, the forward journey tree |
-| `explain_visually` | `projectDir`, `target` | `render/visual.ts:renderExplainVisually` — navigation-in, render tree, data flow, and a state-placement decision tree with this project's branch highlighted. Bounded at 22 nodes per diagram, depth 3 |
-| `get_feature` | `projectDir`, `feature?` | `analyze/features.ts` — `loadFeatureConfig` (`contextifly.features.json` or `.pixelcontextifly/features.json`) else `deriveFeatures` from top-level route segments; then `renderFeatureList` or `renderFeature` |
-| `match_screenshot` | `projectDir`, `element?` \| `markdown?` | `analyze/search.ts:matchUiElement` — text in, no upload. Whole phrase weighted ×2, then per-token ≥3 chars ×1, scores summed, threshold 60, top 5, each with the routes whose render tree contains it |
+`projectDir`, `action` (`remove` | `split` | `lazy_load`), `target` — single-node digital twin.
 
-### Health and time
+```mermaid
+flowchart TD
+  A["what_if(projectDir, action, target)"] --> B["index.resolve, best match only"]
+  B --> C{"action"}
+  C -->|"remove"| D["simulateRemove"]
+  D --> D1["direct in-edges, excluding defines and imports<br/>those are mechanical, not breakage"]
+  D --> D2["transitive dependents, routes that stay safe, files to touch"]
+  C -->|"split"| E["simulateSplit"]
+  E --> E1["call sites to update"]
+  E --> E2["natural boundaries from child and state clusters"]
+  C -->|"lazy_load"| F["simulateLazyLoad"]
+  F --> F1["exclusive versus shared subtree"]
+  F --> F2["loading boundaries needed, and whether it is worth it"]
+```
 
-| Tool | Params | Chain |
-|---|---|---|
-| `analyze_project` | `projectDir` | `analyze/health.ts:analyzeProject` — score 0–100: circular imports, dead code (Next.js framework entry points like `page`/`layout`/`middleware` are exempt, since the framework invokes them and no import edge exists), unused endpoints, oversized components, duplicate names, JSX-shape structural duplicates |
-| `graph_diff` | `projectDir`, `snapshot?` | `store/graph-store.ts:listSnapshots`/`loadSnapshot` → `render/history.ts:renderGraphDiff`. Defaults to the newest snapshot |
-| `graph_timeline` | `projectDir` | every snapshot oldest-first plus current → `render/history.ts:renderTimeline` |
+### `simulate_pr`
 
-Snapshots are a side effect of `saveGraph`: the previous graph is archived only when its
-`contentKey` (files + nodes + edges, **ignoring `indexedAt`**) differs, so no-op re-indexes
-never pile up history. Last 20 kept.
+`projectDir`, `ref?`, `base?`, `patch?` — the whole-PR digital twin. Builds two graphs.
 
-### Meta
+```mermaid
+flowchart TD
+  A["simulate_pr(projectDir, ref, base, patch)"] --> B["resolveBase: master then main"]
+  B --> C{"stored graph commit equals target sha?"}
+  C -->|"yes"| D["reuse the stored graph, skip the worktree"]
+  C -->|"no"| E["store/git.ts : withWorktree<br/>temp dir, your checkout is never touched"]
+  E --> F["applyPatch when a diff file was passed"]
+  F --> G["indexProject with force true"]
+  D --> H{"subtract edge sets"}
+  G --> H
+  H -->|"edges ADDED"| I["a path just went live"]
+  H -->|"edges REMOVED"| J["a flow just broke"]
+  I --> K["1. userSurface — routes the user sees change"]
+  I --> L["2. reactivatedLegacy — new edge into untouched code<br/>older than 180 days, at most 40 git probes"]
+  I --> M["3. contractRisks — changed contract types<br/>still called by untouched consumers"]
+  M --> M1["firstUnguardedChain scans 12 lines past the call site"]
+  J --> N["4. brokenFlows — caller left pointing at something deleted"]
+  I --> O["5. renderCrossApp — delegates to fleet, see below"]
+  K --> P["verdict plus ranked test scope<br/>each section capped at 12 rows"]
+  L --> P
+  M --> P
+  N --> P
+  O --> P
+```
 
-| Tool | Params | Chain |
-|---|---|---|
-| `token_savings` | `projectDir` | `store/usage-ledger.ts:renderSavingsReport` + `render/savings-html.ts:saveSavingsHtml` |
+Contract types are `api`, `service`, `controller`, `entity`, `hook`, `context`, `channel` —
+change one and you have changed somebody else's contract. `reactivatedLegacy` is the
+incident this tool exists for: a change silently switches execution onto a stale path whose
+response shape was never updated, it returns null, the frontend crashes.
 
-**Registered directly, not through the wrapper** — that's deliberate, so the report never
-counts itself. Its primary claim is *work avoided* (files not read); only answer sizes,
-latency, and compression are measured, and every derived figure is badged estimated.
+### `impact_across_apps`
+
+`projectDir`, `target` — one backend, many apps, no PR required.
+
+```mermaid
+flowchart TD
+  A["impact_across_apps(projectDir, target)"] --> B{"contextifly.workspace.json present?"}
+  B -->|"no"| C["scaffoldFleetConfig — starter file, never overwrites"]
+  B -->|"yes"| D["for each declared app"]
+  D --> E["role release: master then main, via withWorktree<br/>what users are actually running"]
+  D --> F["role checkout: the branch that repo has open<br/>working tree included, only when it differs"]
+  E --> G["cache at .pixelcontextifly/fleet, keyed by sha<br/>a dirty tree is never cached"]
+  F --> G
+  G --> H["analyze/endpoints.ts : endpointMatch"]
+  H -->|"identical shape"| I["confidence 1.0"]
+  H -->|"same depth, parameter meets literal"| J["confidence 0.8"]
+  H -->|"segment-aligned suffix"| K["confidence 0.6 — set basePath to confirm"]
+  I --> L["per app: affected endpoints, up to 6 call sites,<br/>the screens behind them"]
+  J --> L
+  K --> L
+  L --> M["apps proven NOT affected"]
+  L --> N["mobile breaks escalated — shipped builds cannot be hotfixed"]
+```
+
+When `release` and `checkout` disagree, that disagreement is the answer: a feature branch
+that already migrated reports clean while production is one merge from crashing.
+
+### `trace_flow`
+
+`projectDir`, `from`, `to?` — a user journey, in a few hundred tokens.
+
+```mermaid
+flowchart LR
+  A["trace_flow(projectDir, from, to)"] --> B{"was to supplied?"}
+  B -->|"yes"| C["shortest path over navigates_to, renders, calls"]
+  C --> D["decorate each step with its API calls and alternative branches"]
+  B -->|"no"| E["forward journey tree from that entry point"]
+  D --> F["render/visual.ts : traceFlow"]
+  E --> F
+  F --> G["styled Mermaid diagram"]
+  F --> H["numbered step list with file paths"]
+```
+
+### `explain_visually`
+
+`projectDir`, `target` — a multi-diagram dossier for one node.
+
+```mermaid
+flowchart TD
+  A["explain_visually(projectDir, target)"] --> B["render/visual.ts : renderExplainVisually"]
+  B --> C["navigation-in: how users reach it"]
+  B --> D["render tree: what it is composed of"]
+  B --> E["data flow: API to hook to state to UI"]
+  B --> F["state-placement decision tree<br/>with this project's branch highlighted"]
+  C --> G["bounded at 22 nodes per diagram, depth 3"]
+  D --> G
+  E --> G
+  F --> G
+```
+
+Every box is a real node from the codebase — it speaks React and Flutter both.
+
+### `get_feature`
+
+`projectDir`, `feature?` — reason in features, not files.
+
+```mermaid
+flowchart TD
+  A["get_feature(projectDir, feature)"] --> B{"config file?"}
+  B -->|"contextifly.features.json or .pixelcontextifly/features.json"| C["loadFeatureConfig<br/>patterns: route path, file glob, symbol fragment"]
+  B -->|"none"| D["deriveFeatures — auto, from top-level route segments"]
+  C --> E{"feature name given?"}
+  D --> E
+  E -->|"no"| F["renderFeatureList — all features, member counts,<br/>cross-feature shared nodes"]
+  E -->|"yes"| G["renderFeature — routes, components, state, APIs,<br/>entry points from outside the feature"]
+```
+
+### `match_screenshot`
+
+`projectDir`, `element?` or `markdown?` — UI element to component. Text in, no upload.
+
+```mermaid
+flowchart LR
+  A["match_screenshot(projectDir, element, markdown)"] --> B{"which input?"}
+  B -->|"element"| C["one query"]
+  B -->|"markdown"| D["extractUiCandidates — bold, quoted, code, headings<br/>capped at 20"]
+  C --> E["analyze/search.ts : matchUiElement"]
+  D --> E
+  E --> F["whole phrase, weight 2"]
+  E --> G["each token of 3 or more chars, weight 1"]
+  F --> H["sum scores, drop files, threshold 60, top 5"]
+  G --> H
+  H --> I["per match: the node plus the routes<br/>whose render tree contains it"]
+```
+
+### `analyze_project`
+
+`projectDir` — architecture score 0 to 100, no LLM involved.
+
+```mermaid
+flowchart TD
+  A["analyze_project(projectDir)"] --> B["analyze/health.ts : analyzeProject"]
+  B --> C["circular imports"]
+  B --> D["possibly-dead components and hooks"]
+  B --> E["API routes never called from the UI"]
+  B --> F["oversized components, by loc"]
+  B --> G["duplicate component names"]
+  B --> H["structural duplicates — same JSX shape fingerprint,<br/>copy-pasted then renamed"]
+  D --> I["FRAMEWORK_ENTRY exemption:<br/>page, layout, template, error, loading, not-found,<br/>global-error, default, middleware, app, document"]
+  C --> J["score plus debt lists"]
+  E --> J
+  F --> J
+  G --> J
+  H --> J
+  I --> J
+```
+
+The exemption matters: Next.js invokes those files itself, so no import edge exists and a
+naive dead-code check would flag every page in the app.
+
+### `graph_diff` and `graph_timeline`
+
+`projectDir`, `snapshot?` — and `projectDir`. Both read history, neither writes it.
+
+```mermaid
+flowchart TD
+  A["saveGraph, during index_project"] --> B{"contentKey differs?<br/>files plus nodes plus edges, ignoring indexedAt"}
+  B -->|"no"| C["no snapshot — no-op re-indexes never pile up history"]
+  B -->|"yes"| D["archive previous to history, keep the newest 20"]
+  D --> E["graph_diff: newest snapshot, or the one you name"]
+  E --> F["render/history.ts : renderGraphDiff<br/>added and removed routes, components, hooks,<br/>contexts, APIs, plus coupling changes"]
+  D --> G["graph_timeline: every snapshot oldest first, plus current"]
+  G --> H["render/history.ts : renderTimeline<br/>dated and git-commit tagged"]
+```
+
+### `token_savings`
+
+`projectDir` — the exploration-avoided report.
+
+```mermaid
+flowchart LR
+  A["token_savings(projectDir)"] --> B["registered directly, NOT through the wrapper"]
+  B --> C["so the report never counts itself"]
+  A --> D["store/usage-ledger.ts : renderSavingsReport"]
+  D --> E["measured: answer sizes, latency"]
+  D --> F["estimated: files not read, tokens avoided"]
+  E --> G["render/savings-html.ts : saveSavingsHtml"]
+  F --> G
+  G --> H["markdown report plus offline styled dashboard"]
+```
+
+Primary claim is work avoided, not tokens. Every derived figure is badged estimated; the
+skill prompt forbids calling this proactively.
 
 ## 8. Skill catalogue — all 4
 
@@ -343,12 +536,100 @@ loaded by the AI, telling it which tool to reach for, in what order, and what it
 about the result. They ship with the plugin and need no setup. Full treatment, including
 how to add one: [SKILLS.md](SKILLS.md).
 
-| Skill | Triggers on | Tool sequence |
-|---|---|---|
-| `codegraph-copilot` | "explain this project", onboarding docs, "find the payment flow", complexity estimates, ticket breakdown, root-cause | `index_project` → `get_project_map` first, always. Then per playbook: `trace_flow` for flows, `analyze_project` + high-degree `search_graph` for onboarding, `get_impact` for estimates, and graph **plus** git (`graph_timeline`/`graph_diff` → `git log -S`) for root cause |
-| `codegraph-refactor` | "what should I refactor", split/merge/dedupe, dead code, bundle size | `index_project` → `analyze_project` + `get_project_map` for evidence → `get_impact` on **every** candidate before recommending it → read the top 3–5 files. Never applies changes; max 6 suggestions ranked by value-to-risk |
-| `codegraph-whatif` | "is this PR safe?", "who breaks if I change this service?", "what do I regression-test?" | `simulate_pr` for a branch/patch, `impact_across_apps` for a service without a PR, `what_if` for one node, `get_impact` when no verdict is needed |
-| `codegraph-rosetta` | "explain this like I'm a NestJS dev", landing in Django / Spring Boot / FastAPI / Flask / Go / Rust | Detects the target framework from marker files (`manage.py`, `pom.xml` + `@SpringBootApplication`, `go.mod`, `Cargo.toml`…), never asks. Translates concepts against `references/<framework>.md`, anchored to real files from the graph |
+### `codegraph-copilot`
+
+Triggers on: "explain this project", onboarding docs, "find the payment flow", complexity
+estimates, ticket breakdown, "why is X broken".
+
+```mermaid
+flowchart TD
+  A["project-level question"] --> B["index_project"]
+  B --> C["get_project_map — always, it is the table of contents"]
+  C --> D{"which playbook"}
+  D -->|"explain this project"| E["analyze_project plus highest-degree search_graph<br/>then read the entry point and 2 or 3 central components"]
+  D -->|"find the X flow"| F["trace_flow(from, to)<br/>then read only the files the step list names"]
+  D -->|"visualize state management"| G["search_graph per context<br/>then who uses each, ranked Mermaid"]
+  D -->|"estimate complexity"| H["get_impact<br/>S under 5 dependents, M 5 to 15, L over 15 or 3 plus routes"]
+  D -->|"break into tickets"| I["complexity first, then dependency order:<br/>schema, API, state, UI, wiring, tests"]
+  D -->|"why is X broken"| J["dependency chain, then graph_timeline or graph_diff,<br/>then git log -S — graph AND git"]
+  J --> K["a missing edge is evidence too:<br/>the expected uses or calls edge that is not there"]
+```
+
+### `codegraph-refactor`
+
+Triggers on: "what should I refactor", split or merge, extract shared logic, dead code,
+bundle size. Produces a plan and never applies it.
+
+```mermaid
+flowchart TD
+  A["refactoring request"] --> B["index_project — stale advice is worse than none"]
+  B --> C["analyze_project: score plus debt lists"]
+  B --> D["get_project_map: route and component structure"]
+  C --> E["candidates"]
+  D --> E
+  E --> F["get_impact on EVERY candidate before recommending it"]
+  F --> G["blast radius sets both risk label and priority"]
+  G --> H["read the source of the top 3 to 5<br/>the graph says where, only the code says whether"]
+  H --> I["max 6 suggestions, ranked by value to risk"]
+  I --> J["dead-code items carry the barrel and dynamic-import caveat<br/>plus the grep that verifies them"]
+  I --> K["clean bill at score 90 or above: say so and stop,<br/>never fabricate busywork"]
+```
+
+### `codegraph-whatif`
+
+Triggers on: "is this PR safe to merge?", "who breaks if I change this service?", "what do
+I regression-test?", "why did untouched code crash?"
+
+```mermaid
+flowchart TD
+  A["blast-radius question"] --> B["index_project first, re-index if stale"]
+  B --> C{"what is being asked"}
+  C -->|"is this PR safe"| D["simulate_pr with ref, or patch for an unfetched PR"]
+  C -->|"I am about to change OrdersService"| E["impact_across_apps"]
+  C -->|"delete, split or lazy-load one node"| F["what_if"]
+  C -->|"what depends on this, no verdict needed"| G["get_impact"]
+  D --> H["read the output in order of DANGER, not order of output"]
+  H --> H1["1. reactivated legacy paths — the headline"]
+  H --> H2["2. flows that break"]
+  H --> H3["3. contract risk with unguarded dereferences"]
+  H --> H4["4. cross-app impact"]
+  H --> H5["5. test scope, hand this over as the checklist"]
+  E --> I["report BOTH versions of every app"]
+  I --> I1["release: what users run"]
+  I --> I2["checkout: the branch that repo has open"]
+  I1 --> J["when they disagree, state the ordering constraint out loud"]
+  I2 --> J
+```
+
+The reporting rules are the skill's real content: lead with the blocker not the summary,
+report the unaffected apps too because reachability is a closed set, escalate mobile
+because shipped builds cannot be hotfixed, and state the static-analysis ceiling once at
+the end rather than hedging every line.
+
+### `codegraph-rosetta`
+
+Triggers on: "explain this like I'm a NestJS dev", or landing in a backend framework you
+do not know.
+
+```mermaid
+flowchart TD
+  A["unfamiliar codebase"] --> B["home framework: from their words, else one short question"]
+  A --> C["target framework: detect from marker files, never ask"]
+  C --> C1["manage.py or settings.py, INSTALLED_APPS: Django"]
+  C --> C2["pom.xml or build.gradle plus SpringBootApplication: Spring Boot"]
+  C --> C3["fastapi or flask in requirements: FastAPI or Flask"]
+  C --> C4["go.mod: Go — Cargo.toml with axum or actix: Rust"]
+  C --> C5["nestjs/core in package.json: NestJS"]
+  B --> D["load skills/codegraph-rosetta/references/framework.md"]
+  C1 --> D
+  C2 --> D
+  C3 --> D
+  C4 --> D
+  C5 --> D
+  D --> E["translate concepts both ways:<br/>controllers, DI, modules, entities, guards, middleware"]
+  E --> F["anchor every concept to a REAL file in this repo<br/>never explain the framework in the abstract"]
+  F --> G["walk the reading order, mental-model gotchas included"]
+```
 
 Two rules run through all of them, and they're the reason the skills exist at all:
 
